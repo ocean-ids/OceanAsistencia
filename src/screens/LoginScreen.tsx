@@ -63,7 +63,7 @@ export default function LoginScreen() {
                 editable={!loading}
               />
               <TouchableOpacity style={styles.eye} onPress={() => setShowPassword(v => !v)}>
-                <Text style={styles.eyeTxt}>{showPassword ? '🙈' : '👁'}</Text>
+                <Text style={styles.eyeTxt}>{showPassword ? '👁' : '👁'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -87,7 +87,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
-        
+
       </KeyboardAvoidingView>
     </ImageBackground>
   );
