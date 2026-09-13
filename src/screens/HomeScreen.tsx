@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
 const AZUL = '#0c2f5a';
@@ -18,13 +19,14 @@ type Opcion = { icon: string; titulo: string; desc: string; onPress: () => void 
 
 export default function HomeScreen() {
   const { user, signOut } = useAuth();
+  const nav = useNavigation<any>();
 
   const proximamente = (nombre: string) =>
     Alert.alert(nombre, 'Función en construcción — la agregamos en el siguiente paso.');
 
   const opciones: Opcion[] = [
-    { icon: '📋', titulo: 'Personal del día', desc: 'Ver la plantilla y relevos', onPress: () => proximamente('Personal del día') },
-    { icon: '✅', titulo: 'Marcar relevo', desc: 'Confirmar asistencia del puesto', onPress: () => proximamente('Marcar relevo') },
+    { icon: '📋', titulo: 'Personal del día', desc: 'Ver la plantilla y relevos', onPress: () => nav.navigate('PersonalDia') },
+    { icon: '✅', titulo: 'Marcar relevo', desc: 'Confirmar asistencia del puesto', onPress: () => nav.navigate('MarcarRelevo') },
     { icon: '⚠️', titulo: 'Novedades', desc: 'Reportar una novedad', onPress: () => proximamente('Novedades') },
     { icon: '👤', titulo: 'Mi perfil', desc: 'Tus datos y sesión', onPress: () => proximamente('Mi perfil') },
   ];
