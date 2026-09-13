@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, Alert, TextInput,
+  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, Alert, TextInput, Modal,
 } from 'react-native';
-import { api, ReporteRow } from '../services/api';
+import { api, ReporteRow, PersonaLite } from '../services/api';
 
 const AZUL = '#0c2f5a';
 
@@ -32,6 +32,12 @@ export default function MarcarRelevoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState<string>('');
+
+  // Modal de reemplazo
+  const [reempTarget, setReempTarget] = useState<ReporteRow | null>(null);
+  const [busPersona, setBusPersona] = useState<string>('');
+  const [personas, setPersonas] = useState<PersonaLite[]>([]);
+  const [buscandoPersona, setBuscandoPersona] = useState(false);
 
   const cargar = useCallback(async (f: string) => {
     setLoading(true);
@@ -99,6 +105,59 @@ export default function MarcarRelevoScreen() {
     }
   };
 
+  // --- Reemplazo (mover a otra persona a cubrir este puesto) ---
+  const abrirReemplazo = (row: ReporteRow) => {
+    if (!marcable(row)) return;
+    setReempTarget(row);
+    setBusPersona('');
+    setPersonas([]);
+  };
+
+  const buscarPersona = async (texto: string) => {
+    setBusPersona(texto);
+    if (texto.trim().length < 2) { setPersonas([]); return; }
+    setBuscandoPersona(true);
+    try {
+      const res = await api.buscarPersonas(texto.trim());
+      setPersonas((res || []).slice(0, 40));
+    } catch {
+      setPersonas([]);
+    } finally {
+      setBuscandoPersona(false);
+    }
+  };
+
+  const guardarReemplazo = async (row: ReporteRow, personaId: number | null, nombre: string) => {
+    const k = keyOf(row);
+    const prev = { id: row.reemplazo_id, nom: row.reemplazo, estado: row.estado };
+    const nuevoEstado = personaId ? 'ADICIONAL' : 'TURNO';
+    // Optimista
+    setRows(rs => rs.map(r => (keyOf(r) === k ? { ...r, reemplazo_id: personaId, reemplazo: nombre, estado: nuevoEstado } : r)));
+    setReempTarget(null);
+    setSavingKey(k);
+    try {
+      const payload = { estado: nuevoEstado, reemplazo_id: personaId, fecha };
+      const res = row.asignacion_id != null
+        ? await api.marcarAsistencia(row.asignacion_id, payload)
+        : await api.marcarSacafrancoAsistencia(row.sacafranco_fila_id!, payload);
+      setRows(rs => rs.map(r => (keyOf(r) === k
+        ? { ...r, reemplazo_id: res.reemplazo_id ?? null, reemplazo: res.reemplazo ?? '', estado: res.estado ?? nuevoEstado }
+        : r)));
+    } catch (e: any) {
+      setRows(rs => rs.map(r => (keyOf(r) === k ? { ...r, reemplazo_id: prev.id, reemplazo: prev.nom, estado: prev.estado } : r)));
+      Alert.alert('No se pudo guardar el reemplazo', e?.message || 'Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const elegirReemplazo = (persona: PersonaLite) => {
+    if (!reempTarget) return;
+    guardarReemplazo(reempTarget, persona.id, `${persona.nombres} ${persona.apellidos}`.trim());
+  };
+
+  const quitarReemplazo = (row: ReporteRow) => guardarReemplazo(row, null, '');
+
   // Buscar por cliente/instalación o por apellidos y nombres (solo filtra lo mostrado;
   // el resumen sigue contando todo el día).
   const q = busqueda.trim().toLowerCase();
@@ -149,6 +208,21 @@ export default function MarcarRelevoScreen() {
             <Text style={[styles.btnTxt, est === 'FALTO' && styles.btnTxtOn]}>✗ Faltó</Text>
           </TouchableOpacity>
         </View>
+
+        {item.reemplazo ? (
+          <View style={styles.reempRow}>
+            <Text style={styles.reempLbl} numberOfLines={1}>
+              Cubre: <Text style={styles.reempNom}>{item.reemplazo}</Text>
+            </Text>
+            <TouchableOpacity disabled={guardando} onPress={() => quitarReemplazo(item)}>
+              <Text style={styles.reempQuitar}>Quitar ✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.reempBtn} disabled={guardando} onPress={() => abrirReemplazo(item)}>
+            <Text style={styles.reempBtnTxt}>＋ Poner reemplazo</Text>
+          </TouchableOpacity>
+        )}
 
         {guardando && <ActivityIndicator size="small" color={AZUL} style={styles.saving} />}
       </View>
@@ -211,6 +285,57 @@ export default function MarcarRelevoScreen() {
           ListEmptyComponent={<View style={styles.center}><Text style={styles.vacio}>Sin registros para este día</Text></View>}
         />
       )}
+
+      {/* Modal: elegir persona para el reemplazo */}
+      <Modal visible={!!reempTarget} animationType="slide" transparent onRequestClose={() => setReempTarget(null)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Poner reemplazo</Text>
+              <TouchableOpacity onPress={() => setReempTarget(null)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {!!reempTarget && (
+              <Text style={styles.modalSub} numberOfLines={1}>
+                {(reempTarget.instalacion_nombre || reempTarget.cliente || '')}
+                {' · '}
+                {(reempTarget.puesto_tipo || reempTarget.puesto || '')}
+              </Text>
+            )}
+            <TextInput
+              style={styles.modalSearch}
+              value={busPersona}
+              onChangeText={buscarPersona}
+              placeholder="Buscar persona (nombre o cédula)…"
+              placeholderTextColor="#9aa7b4"
+              autoFocus
+              autoCorrect={false}
+            />
+            {buscandoPersona ? (
+              <ActivityIndicator color={AZUL} style={{ marginTop: 18 }} />
+            ) : (
+              <FlatList
+                data={personas}
+                keyExtractor={(p) => String(p.id)}
+                keyboardShouldPersistTaps="handled"
+                style={styles.modalList}
+                renderItem={({ item: p }) => (
+                  <TouchableOpacity style={styles.personaRow} onPress={() => elegirReemplazo(p)}>
+                    <Text style={styles.personaNom}>{p.apellidos} {p.nombres}</Text>
+                    <Text style={styles.personaMeta}>{p.cedula} · {p.tipo}{!p.is_active ? ' · inactivo' : ''}</Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.modalVacio}>
+                    {busPersona.trim().length >= 2 ? 'Sin resultados' : 'Escribe al menos 2 letras'}
+                  </Text>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -250,4 +375,24 @@ const styles = StyleSheet.create({
   ok: { color: '#1a8a5c' },
   bad: { color: '#c33a34' },
   pend: { color: '#b4870b' },
+  // Reemplazo en tarjeta
+  reempBtn: { marginTop: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', borderStyle: 'dashed', alignItems: 'center' },
+  reempBtnTxt: { fontSize: 13, fontWeight: '600', color: AZUL },
+  reempRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#eef4ff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 },
+  reempLbl: { flex: 1, fontSize: 13, color: '#3b4a59' },
+  reempNom: { fontWeight: '700', color: '#14202b' },
+  reempQuitar: { fontSize: 12, fontWeight: '700', color: '#c33a34' },
+  // Modal
+  modalBg: { flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, maxHeight: '80%' },
+  modalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: '#14202b' },
+  modalClose: { fontSize: 18, color: '#6b7787', fontWeight: '700', paddingHorizontal: 6 },
+  modalSub: { fontSize: 12, color: '#6b7787', marginTop: 4 },
+  modalSearch: { backgroundColor: '#f1f4f8', borderRadius: 10, borderWidth: 1, borderColor: '#e3e8ef', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#14202b', marginTop: 12 },
+  modalList: { marginTop: 8 },
+  personaRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef1f5' },
+  personaNom: { fontSize: 15, fontWeight: '600', color: '#14202b' },
+  personaMeta: { fontSize: 12, color: '#6b7787', marginTop: 2 },
+  modalVacio: { textAlign: 'center', color: '#6b7787', paddingVertical: 24 },
 });

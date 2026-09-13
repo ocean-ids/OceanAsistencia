@@ -70,16 +70,27 @@ export type ReporteRow = {
   nombre_apellidos?: string;    // "HUECA" si no hay persona
   estado_asistencia?: string;   // ASISTIO / FALTO / ''
   estado?: string;
+  reemplazo_id?: number | null;
+  reemplazo?: string;           // nombre del reemplazo (si hay)
   hueca?: boolean;
   provincia?: string;
   zona_titulo?: string;
+};
+
+export type PersonaLite = {
+  id: number;
+  nombres: string;
+  apellidos: string;
+  cedula: string;
+  tipo: string;
+  is_active: boolean;
 };
 
 type ReporteResp = { results: ReporteRow[]; total: number; page: number; page_size: number; total_pages: number };
 
 // Payload para marcar asistencia (mismo contrato que usa el web).
 export type MarcarPayload = {
-  estado_asistencia: string | null;   // 'ASISTIO' | 'FALTO' | null (quitar)
+  estado_asistencia?: string | null;   // 'ASISTIO' | 'FALTO' | null (quitar); omitir = no tocar
   estado?: string;                     // 'TURNO'
   reemplazo_id?: number | null;
   descripcion?: string | null;
@@ -106,6 +117,10 @@ export const api = {
   // Marcar relevo: asistencia de un SACAFRANCO (no tiene asignación; se guarda por su fila).
   marcarSacafrancoAsistencia: (filaId: number, payload: MarcarPayload) =>
     request<ReporteRow>(`/reporte-asistencia/sacafranco/${filaId}/`, { method: 'PUT', body: payload }),
+
+  // Buscar personas para elegir un reemplazo (por nombre, apellido o cédula).
+  buscarPersonas: (q: string) =>
+    request<PersonaLite[]>(`/personas/?q=${encodeURIComponent(q)}`),
 
   logout: async () => {
     const refresh = await getRefreshToken();
