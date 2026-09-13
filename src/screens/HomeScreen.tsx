@@ -28,7 +28,7 @@ export default function HomeScreen() {
     { icon: '📋', titulo: 'Personal del día', desc: 'Ver la plantilla y relevos', onPress: () => nav.navigate('PersonalDia') },
     { icon: '✅', titulo: 'Marcar relevo', desc: 'Confirmar asistencia del puesto', onPress: () => nav.navigate('MarcarRelevo') },
     { icon: '⚠️', titulo: 'Novedades', desc: 'Reportar una novedad', onPress: () => proximamente('Novedades') },
-    { icon: '👤', titulo: 'Mi perfil', desc: 'Tus datos y sesión', onPress: () => proximamente('Mi perfil') },
+    { icon: '👤', titulo: 'Mi perfil', desc: 'Tus datos y sesión', onPress: () => nav.navigate('Perfil') },
   ];
 
   return (
