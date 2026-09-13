@@ -57,11 +57,55 @@ export type LoginResponse = {
   user: SessionUser;
 };
 
+export type ReporteRow = {
+  asignacion_id: number | null;
+  sacafranco_fila_id?: number | null;
+  codigo?: string;
+  cliente?: string;
+  instalacion_nombre?: string;
+  puesto?: string;
+  puesto_tipo?: string;
+  horario?: string;
+  turno?: string;               // Diurno / Nocturno / Tarde / Veinticuatro
+  nombre_apellidos?: string;    // "HUECA" si no hay persona
+  estado_asistencia?: string;   // ASISTIO / FALTO / ''
+  estado?: string;
+  hueca?: boolean;
+  provincia?: string;
+  zona_titulo?: string;
+};
+
+type ReporteResp = { results: ReporteRow[]; total: number; page: number; page_size: number; total_pages: number };
+
+// Payload para marcar asistencia (mismo contrato que usa el web).
+export type MarcarPayload = {
+  estado_asistencia: string | null;   // 'ASISTIO' | 'FALTO' | null (quitar)
+  estado?: string;                     // 'TURNO'
+  reemplazo_id?: number | null;
+  descripcion?: string | null;
+  hueca?: boolean;
+  hueca_motivo?: string | null;
+  row_color?: string;                  // '#fff8b3' asistió, '#ffb3b3' faltó, '' quitar
+  fecha: string;                       // YYYY-MM-DD
+};
+
 export const api = {
   login: (username: string, password: string) =>
     request<LoginResponse>('/login/', { method: 'POST', body: { username, password }, auth: false }),
 
   getUser: () => request<SessionUser>('/user/'),
+
+  // Personal del día (plantilla de asistencia). fecha en formato YYYY-MM-DD.
+  getReporteDia: (fecha: string) =>
+    request<ReporteResp>(`/reporte-asistencia/?fecha=${encodeURIComponent(fecha)}&page_size=100000`),
+
+  // Marcar relevo: asistencia de un puesto FIJO/HUECA (por asignación).
+  marcarAsistencia: (asignacionId: number, payload: MarcarPayload) =>
+    request<ReporteRow>(`/reporte-asistencia/${asignacionId}/`, { method: 'PUT', body: payload }),
+
+  // Marcar relevo: asistencia de un SACAFRANCO (no tiene asignación; se guarda por su fila).
+  marcarSacafrancoAsistencia: (filaId: number, payload: MarcarPayload) =>
+    request<ReporteRow>(`/reporte-asistencia/sacafranco/${filaId}/`, { method: 'PUT', body: payload }),
 
   logout: async () => {
     const refresh = await getRefreshToken();
