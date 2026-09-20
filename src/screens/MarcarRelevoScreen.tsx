@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, Alert, TextInput, Modal,
+  View, Text, FlatList, SectionList, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, Alert, TextInput, Modal,
 } from 'react-native';
 import { api, ReporteRow, PersonaLite } from '../services/api';
 
@@ -23,6 +23,12 @@ function fechaLegible(s: string): string {
   return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Orden por el número de la zona (Zona 1, 2, 3…); las sin número van al final.
+function zonaOrden(z: string): number {
+  const m = z.match(/\d+/);
+  return m ? parseInt(m[0], 10) : 9999;
+}
+
 type Estado = 'ASISTIO' | 'FALTO' | '';
 
 export default function MarcarRelevoScreen() {
@@ -32,6 +38,8 @@ export default function MarcarRelevoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState<string>('');
+  const [filtroTurno, setFiltroTurno] = useState<string>('Diurno');
+  const [filtroZona, setFiltroZona] = useState<string>('');  // '' = Todas
 
   // Modal de reemplazo
   const [reempTarget, setReempTarget] = useState<ReporteRow | null>(null);
@@ -158,20 +166,50 @@ export default function MarcarRelevoScreen() {
 
   const quitarReemplazo = (row: ReporteRow) => guardarReemplazo(row, null, '');
 
-  // Buscar por cliente/instalación o por apellidos y nombres (solo filtra lo mostrado;
-  // el resumen sigue contando todo el día).
+  // Jornada: Diurno incluye Tarde y Veinticuatro; Nocturno incluye Veinticuatro.
+  const pasaJornada = (r: ReporteRow) => {
+    const t = r.turno || '';
+    return filtroTurno === 'Nocturno'
+      ? (t === 'Nocturno' || t === 'Veinticuatro')
+      : (t === 'Diurno' || t === 'Tarde' || t === 'Veinticuatro');
+  };
+  // Filtro por ZONA ('' = todas).
+  const pasaZona = (r: ReporteRow) => !filtroZona || (r.zona_titulo || '').trim() === filtroZona;
+  // Buscar por cliente/instalación o por apellidos y nombres.
   const q = busqueda.trim().toLowerCase();
-  const visibles = q
-    ? rows.filter(r => [r.instalacion_nombre, r.cliente, r.nombre_apellidos, r.codigo, r.puesto, r.puesto_tipo]
-        .some(c => (c || '').toLowerCase().includes(q)))
-    : rows;
+  const pasaBusqueda = (r: ReporteRow) => !q ||
+    [r.instalacion_nombre, r.cliente, r.nombre_apellidos, r.codigo, r.puesto, r.puesto_tipo]
+      .some(c => (c || '').toLowerCase().includes(q));
 
-  const evaluables = rows.filter(marcable);
+  const visibles = rows.filter(r => pasaJornada(r) && pasaZona(r) && pasaBusqueda(r));
+
+  // Zonas disponibles (para el selector Todas / zona específica).
+  const zonasDisponibles = (() => {
+    const set = new Set<string>();
+    for (const r of rows) { const z = (r.zona_titulo || '').trim(); if (z) set.add(z); }
+    return Array.from(set).sort((a, b) => (zonaOrden(a) - zonaOrden(b)) || a.localeCompare(b));
+  })();
+
+  // Resumen de la JORNADA + ZONA seleccionadas (lo que se está viendo).
+  const evaluables = rows.filter(r => marcable(r) && pasaJornada(r) && pasaZona(r));
   const resumen = {
     asistio: evaluables.filter(r => (r.estado_asistencia || '').toUpperCase() === 'ASISTIO').length,
     falto: evaluables.filter(r => (r.estado_asistencia || '').toUpperCase() === 'FALTO').length,
     pend: evaluables.filter(r => !(r.estado_asistencia || '')).length,
   };
+
+  // Agrupar por ZONA (encabezados de sección), ordenadas por su número (Zona 1, 2, 3…).
+  const secciones = (() => {
+    const map = new Map<string, ReporteRow[]>();
+    for (const r of visibles) {
+      const z = (r.zona_titulo || '').trim() || 'SIN ZONA';
+      if (!map.has(z)) map.set(z, []);
+      map.get(z)!.push(r);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => (zonaOrden(a[0]) - zonaOrden(b[0])) || a[0].localeCompare(b[0]))
+      .map(([title, data]) => ({ title, data }));
+  })();
 
   const renderItem = ({ item }: { item: ReporteRow }) => {
     const est = (item.estado_asistencia || '').toUpperCase();
@@ -220,7 +258,7 @@ export default function MarcarRelevoScreen() {
           </View>
         ) : (
           <TouchableOpacity style={styles.reempBtn} disabled={guardando} onPress={() => abrirReemplazo(item)}>
-            <Text style={styles.reempBtnTxt}>＋ Poner reemplazo</Text>
+            <Text style={styles.reempBtnTxt}>＋ Reemplazo</Text>
           </TouchableOpacity>
         )}
 
@@ -262,6 +300,32 @@ export default function MarcarRelevoScreen() {
         )}
       </View>
 
+      {/* Jornada: Diurno / Nocturno */}
+      <View style={styles.chipsWrap}>
+        {['Diurno', 'Nocturno'].map((t) => {
+          const activo = filtroTurno === t;
+          return (
+            <TouchableOpacity key={t} style={[styles.chip, activo && styles.chipOn]} onPress={() => setFiltroTurno(t)}>
+              <Text style={[styles.chipTxt, activo && styles.chipTxtOn]}>{t}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Selector de zona: Todas o una específica */}
+      <View style={styles.zonaBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.zonaBarRow}>
+          {['', ...zonasDisponibles].map((z) => {
+            const activo = filtroZona === z;
+            return (
+              <TouchableOpacity key={z || 'todas'} style={[styles.zChip, activo && styles.zChipOn]} onPress={() => setFiltroZona(z)}>
+                <Text style={[styles.zChipTxt, activo && styles.zChipTxtOn]}>{z || 'Todas'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Resumen */}
       <View style={styles.resumen}>
         <View style={styles.resItem}><Text style={[styles.resNum, styles.ok]}>{resumen.asistio}</Text><Text style={styles.resLbl}>Asistió</Text></View>
@@ -276,13 +340,20 @@ export default function MarcarRelevoScreen() {
       ) : error ? (
         <View style={styles.center}><Text style={styles.err}>{error}</Text></View>
       ) : (
-        <FlatList
-          data={visibles}
+        <SectionList
+          sections={secciones}
           keyExtractor={(it, i) => `${keyOf(it)}-${i}`}
-          renderItem={renderItem}
+          renderItem={({ item }) => renderItem({ item })}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.zonaHead}>
+              <Text style={styles.zonaHeadTxt}>{section.title.toUpperCase()}</Text>
+              <Text style={styles.zonaHeadCount}>{section.data.length}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => cargar(fecha)} colors={[AZUL]} />}
-          ListEmptyComponent={<View style={styles.center}><Text style={styles.vacio}>Sin registros para este día</Text></View>}
+          ListEmptyComponent={<View style={styles.center}><Text style={styles.vacio}>Sin registros de {filtroTurno} para este día</Text></View>}
         />
       )}
 
@@ -347,6 +418,20 @@ const styles = StyleSheet.create({
   navTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
   fechaBox: { flex: 1, alignItems: 'center' },
   fechaTxt: { fontSize: 15, fontWeight: '700', color: '#14202b', textTransform: 'capitalize' },
+  chipsWrap: { flexDirection: 'row', justifyContent: 'center', gap: 10, backgroundColor: '#fff', paddingBottom: 10 },
+  chip: { paddingHorizontal: 22, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff' },
+  chipOn: { backgroundColor: AZUL, borderColor: AZUL },
+  chipTxt: { fontSize: 14, fontWeight: '700', color: '#475569' },
+  chipTxtOn: { color: '#fff' },
+  zonaBar: { backgroundColor: '#fff' },
+  zonaBarRow: { paddingHorizontal: 12, paddingBottom: 10, gap: 8, flexDirection: 'row' },
+  zChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#dbe2ea', backgroundColor: '#f4f6f9' },
+  zChipOn: { backgroundColor: '#1c4a80', borderColor: '#1c4a80' },
+  zChipTxt: { fontSize: 13, fontWeight: '600', color: '#5b6b79' },
+  zChipTxtOn: { color: '#fff' },
+  zonaHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#e8edf3', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, marginBottom: 8, marginTop: 4 },
+  zonaHeadTxt: { fontSize: 13, fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
+  zonaHeadCount: { fontSize: 12, fontWeight: '700', color: '#64748b' },
   searchWrap: { backgroundColor: '#fff', paddingHorizontal: 12, paddingBottom: 10, position: 'relative', justifyContent: 'center' },
   search: { backgroundColor: '#f1f4f8', borderRadius: 10, borderWidth: 1, borderColor: '#e3e8ef', paddingHorizontal: 14, paddingVertical: 9, paddingRight: 36, fontSize: 14, color: '#14202b' },
   searchClear: { position: 'absolute', right: 22, top: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
