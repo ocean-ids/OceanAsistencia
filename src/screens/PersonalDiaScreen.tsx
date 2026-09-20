@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, TextInput,
+  View, Text, FlatList, SectionList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, TextInput,
 } from 'react-native';
 import { api, ReporteRow } from '../services/api';
 
@@ -26,6 +26,12 @@ function fechaLegible(s: string): string {
   return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Orden por el número de la zona (Zona 1, 2, 3…); las sin número van al final.
+function zonaOrden(z: string): number {
+  const m = z.match(/\d+/);
+  return m ? parseInt(m[0], 10) : 9999;
+}
+
 function jornadaColor(turno?: string): { bg: string; fg: string } {
   switch (turno) {
     case 'Diurno': return { bg: '#FDE68A', fg: '#78350F' };
@@ -42,21 +48,43 @@ export default function PersonalDiaScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtroTurno, setFiltroTurno] = useState<string>('Diurno');
+  const [filtroZona, setFiltroZona] = useState<string>('');  // '' = Todas
   const [busqueda, setBusqueda] = useState<string>('');
 
   const q = busqueda.trim().toLowerCase();
-  const filtradas = rows.filter(r => {
+  const pasaJornada = (r: ReporteRow) => {
     const t = r.turno || '';
-    const okTurno = filtroTurno === 'Nocturno'
+    return filtroTurno === 'Nocturno'
       ? (t === 'Nocturno' || t === 'Veinticuatro')
       // Diurno (por defecto): incluye Tarde y Veinticuatro.
       : (t === 'Diurno' || t === 'Tarde' || t === 'Veinticuatro');
-    if (!okTurno) return false;
-    if (!q) return true;
-    // Buscar por cliente/instalación o por apellidos y nombres.
-    const campos = [r.instalacion_nombre, r.cliente, r.nombre_apellidos, r.codigo, r.puesto, r.puesto_tipo];
-    return campos.some(c => (c || '').toLowerCase().includes(q));
-  });
+  };
+  const pasaZona = (r: ReporteRow) => !filtroZona || (r.zona_titulo || '').trim() === filtroZona;
+  const pasaBusqueda = (r: ReporteRow) => !q ||
+    [r.instalacion_nombre, r.cliente, r.nombre_apellidos, r.codigo, r.puesto, r.puesto_tipo]
+      .some(c => (c || '').toLowerCase().includes(q));
+
+  const filtradas = rows.filter(r => pasaJornada(r) && pasaZona(r) && pasaBusqueda(r));
+
+  // Zonas disponibles para el selector (Todas / zona específica).
+  const zonasDisponibles = (() => {
+    const set = new Set<string>();
+    for (const r of rows) { const z = (r.zona_titulo || '').trim(); if (z) set.add(z); }
+    return Array.from(set).sort((a, b) => (zonaOrden(a) - zonaOrden(b)) || a.localeCompare(b));
+  })();
+
+  // Agrupar por ZONA (encabezados de sección).
+  const secciones = (() => {
+    const map = new Map<string, ReporteRow[]>();
+    for (const r of filtradas) {
+      const z = (r.zona_titulo || '').trim() || 'SIN ZONA';
+      if (!map.has(z)) map.set(z, []);
+      map.get(z)!.push(r);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => (zonaOrden(a[0]) - zonaOrden(b[0])) || a[0].localeCompare(b[0]))
+      .map(([title, data]) => ({ title, data }));
+  })();
 
   const cargar = useCallback(async (f: string) => {
     setLoading(true);
@@ -163,19 +191,40 @@ export default function PersonalDiaScreen() {
         </ScrollView>
       </View>
 
+      {/* Selector de zona: Todas o una específica */}
+      <View style={styles.zonaBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.zonaBarRow}>
+          {['', ...zonasDisponibles].map((z) => {
+            const activo = filtroZona === z;
+            return (
+              <TouchableOpacity key={z || 'todas'} style={[styles.zChip, activo && styles.zChipOn]} onPress={() => setFiltroZona(z)}>
+                <Text style={[styles.zChipTxt, activo && styles.zChipTxtOn]}>{z || 'Todas'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {loading && rows.length === 0 ? (
         <View style={styles.center}><ActivityIndicator size="large" color={AZUL} /></View>
       ) : error ? (
         <View style={styles.center}><Text style={styles.err}>{error}</Text></View>
       ) : (
-        <FlatList
-          data={filtradas}
+        <SectionList
+          sections={secciones}
           keyExtractor={(it, i) => `${it.asignacion_id ?? 's' + it.sacafranco_fila_id}-${i}`}
-          renderItem={renderItem}
+          renderItem={({ item }) => renderItem({ item })}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.zonaHead}>
+              <Text style={styles.zonaHeadTxt}>{section.title.toUpperCase()}</Text>
+              <Text style={styles.zonaHeadCount}>{section.data.length}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => cargar(fecha)} colors={[AZUL]} />}
-          ListEmptyComponent={<View style={styles.center}><Text style={styles.vacio}>Sin registros{filtroTurno ? ' de ' + filtroTurno : ''} para este día</Text></View>}
-          ListHeaderComponent={<Text style={styles.total}>{filtradas.length} registros{filtroTurno ? ' · ' + filtroTurno : ''}</Text>}
+          ListEmptyComponent={<View style={styles.center}><Text style={styles.vacio}>Sin registros de {filtroTurno} para este día</Text></View>}
+          ListHeaderComponent={<Text style={styles.total}>{filtradas.length} registros · {filtroTurno}{filtroZona ? ' · ' + filtroZona : ''}</Text>}
         />
       )}
     </View>
@@ -199,6 +248,15 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: AZUL, borderColor: AZUL },
   chipTxt: { fontSize: 13, fontWeight: '600', color: '#475569' },
   chipTxtOn: { color: '#fff' },
+  zonaBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e3e8ef' },
+  zonaBarRow: { paddingHorizontal: 10, paddingBottom: 8, gap: 8, flexDirection: 'row' },
+  zChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#dbe2ea', backgroundColor: '#f4f6f9' },
+  zChipOn: { backgroundColor: '#1c4a80', borderColor: '#1c4a80' },
+  zChipTxt: { fontSize: 13, fontWeight: '600', color: '#5b6b79' },
+  zChipTxtOn: { color: '#fff' },
+  zonaHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#e8edf3', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, marginBottom: 8, marginTop: 4 },
+  zonaHeadTxt: { fontSize: 13, fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
+  zonaHeadCount: { fontSize: 12, fontWeight: '700', color: '#64748b' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
   err: { color: '#c33a34', textAlign: 'center' },
   vacio: { color: '#6b7787' },
