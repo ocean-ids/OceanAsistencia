@@ -66,6 +66,15 @@ export default function PersonalDiaScreen() {
 
   const filtradas = rows.filter(r => pasaJornada(r) && pasaZona(r) && pasaBusqueda(r));
 
+  // Resumen de asistencia (solo lectura) de lo que se está viendo por jornada + zona.
+  const marcable = (r: ReporteRow) => r.asignacion_id != null || r.sacafranco_fila_id != null;
+  const evaluables = rows.filter(r => marcable(r) && pasaJornada(r) && pasaZona(r));
+  const resumen = {
+    asistio: evaluables.filter(r => (r.estado_asistencia || '').toUpperCase() === 'ASISTIO').length,
+    falto: evaluables.filter(r => (r.estado_asistencia || '').toUpperCase() === 'FALTO').length,
+    pend: evaluables.filter(r => !(r.estado_asistencia || '')).length,
+  };
+
   // Zonas disponibles para el selector (Todas / zona específica).
   const zonasDisponibles = (() => {
     const set = new Set<string>();
@@ -177,9 +186,9 @@ export default function PersonalDiaScreen() {
         )}
       </View>
 
-      {/* Filtro de jornada */}
+      {/* Filtro de jornada (centrado): solo Diurno / Nocturno */}
       <View style={styles.chipsWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        <View style={styles.chipsRow}>
           {TURNOS.map((t) => {
             const activo = filtroTurno === t;
             return (
@@ -188,7 +197,7 @@ export default function PersonalDiaScreen() {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       </View>
 
       {/* Selector de zona: Todas o una específica */}
@@ -203,6 +212,15 @@ export default function PersonalDiaScreen() {
             );
           })}
         </ScrollView>
+      </View>
+
+      {/* Resumen (solo lectura) */}
+      <View style={styles.resumen}>
+        <View style={styles.resItem}><Text style={[styles.resNum, styles.ok]}>{resumen.asistio}</Text><Text style={styles.resLbl}>Asistió</Text></View>
+        <View style={styles.resSep} />
+        <View style={styles.resItem}><Text style={[styles.resNum, styles.bad]}>{resumen.falto}</Text><Text style={styles.resLbl}>Faltó</Text></View>
+        <View style={styles.resSep} />
+        <View style={styles.resItem}><Text style={[styles.resNum, styles.pend]}>{resumen.pend}</Text><Text style={styles.resLbl}>Pendiente</Text></View>
       </View>
 
       {loading && rows.length === 0 ? (
@@ -243,7 +261,7 @@ const styles = StyleSheet.create({
   searchClear: { position: 'absolute', right: 22, top: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   searchClearTxt: { color: '#6b7787', fontSize: 14, fontWeight: '700' },
   chipsWrap: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e3e8ef' },
-  chipsRow: { paddingHorizontal: 10, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  chipsRow: { paddingHorizontal: 10, paddingVertical: 8, gap: 10, flexDirection: 'row', justifyContent: 'center' },
   chip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff' },
   chipOn: { backgroundColor: AZUL, borderColor: AZUL },
   chipTxt: { fontSize: 13, fontWeight: '600', color: '#475569' },
@@ -274,4 +292,11 @@ const styles = StyleSheet.create({
   estado: { marginTop: 8, fontSize: 13, fontWeight: '700' },
   ok: { color: '#1a8a5c' },
   bad: { color: '#c33a34' },
+  pend: { color: '#b4870b' },
+  // Barra de resumen (solo lectura)
+  resumen: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', backgroundColor: '#fff', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e3e8ef' },
+  resItem: { alignItems: 'center', flex: 1 },
+  resSep: { width: 1, height: 28, backgroundColor: '#e3e8ef' },
+  resNum: { fontSize: 20, fontWeight: '800' },
+  resLbl: { fontSize: 11, color: '#6b7787', marginTop: 2 },
 });
