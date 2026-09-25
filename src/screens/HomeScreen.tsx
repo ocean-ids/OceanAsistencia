@@ -24,11 +24,13 @@ export default function HomeScreen() {
   const proximamente = (nombre: string) =>
     Alert.alert(nombre, 'Función en construcción — la agregamos en el siguiente paso.');
 
+  // NOTA: La asistencia la corrige SOLO Consola (en la web). En la app el Supervisor
+  // Motorizado solo CONSULTA (segun la documentacion AS-IS), por eso se retira la opcion
+  // de editar asistencia ("Marcar relevo") y queda solo "Personal del dia" (solo lectura).
   const opciones: Opcion[] = [
-    { icon: '📋', titulo: 'Personal del día', desc: 'Ver la plantilla y Asistencias', onPress: () => nav.navigate('PersonalDia') },
-    { icon: '✅', titulo: 'Asistencia', desc: 'Confirmar asistencia del puesto', onPress: () => nav.navigate('MarcarRelevo') },
-    { icon: '⚠️', titulo: 'Novedades', desc: 'Reportar una novedad', onPress: () => proximamente('Novedades') },
     { icon: '👤', titulo: 'Mi perfil', desc: 'Tus datos y sesión', onPress: () => nav.navigate('Perfil') },
+    { icon: '✅', titulo: 'Asistencia', desc: 'Ver la plantilla y asistencias', onPress: () => nav.navigate('PersonalDia') },
+    { icon: '⚠️', titulo: 'Novedades', desc: 'Reportar una novedad', onPress: () => proximamente('Novedades') },
   ];
 
   return (
