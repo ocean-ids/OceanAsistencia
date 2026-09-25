@@ -6,7 +6,8 @@ import { colors } from '../theme/colors';
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import PersonalDiaScreen from '../screens/PersonalDiaScreen';
-import MarcarRelevoScreen from '../screens/MarcarRelevoScreen';
+// MarcarRelevoScreen queda en el codigo pero NO se navega: la asistencia la corrige solo
+// Consola (web). El Supervisor Motorizado solo consulta (documentacion AS-IS).
 import PerfilScreen from '../screens/PerfilScreen';
 
 const AZUL = '#0c2f5a';
@@ -35,7 +36,6 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
           <Stack.Screen name="PersonalDia" component={PersonalDiaScreen} options={{ title: 'Personal del día' }} />
-          <Stack.Screen name="MarcarRelevo" component={MarcarRelevoScreen} options={{ title: 'Marcar relevo' }} />
           <Stack.Screen name="Perfil" component={PerfilScreen} options={{ title: 'Mi perfil' }} />
         </>
       ) : (
