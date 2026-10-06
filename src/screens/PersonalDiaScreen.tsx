@@ -28,8 +28,15 @@ function fechaLegible(s: string): string {
 
 // Orden por el número de la zona (Zona 1, 2, 3…); las sin número van al final.
 function zonaOrden(z: string): number {
+  if (z === 'BASE') return 99999;          // BASE va al final de todo
   const m = z.match(/\d+/);
   return m ? parseInt(m[0], 10) : 9999;
+}
+
+// Zona de una fila. Los sacafranco en BASE no tienen zona: se agrupan bajo "BASE".
+function zonaDe(r: ReporteRow): string {
+  if ((r.codigo || '').toString().trim().toUpperCase() === 'BASE') return 'BASE';
+  return (r.zona_titulo || '').trim();
 }
 
 function jornadaColor(turno?: string): { bg: string; fg: string } {
@@ -59,7 +66,7 @@ export default function PersonalDiaScreen() {
       // Diurno (por defecto): incluye Tarde y Veinticuatro.
       : (t === 'Diurno' || t === 'Tarde' || t === 'Veinticuatro');
   };
-  const pasaZona = (r: ReporteRow) => !filtroZona || (r.zona_titulo || '').trim() === filtroZona;
+  const pasaZona = (r: ReporteRow) => !filtroZona || zonaDe(r) === filtroZona;
   const pasaBusqueda = (r: ReporteRow) => !q ||
     [r.instalacion_nombre, r.cliente, r.nombre_apellidos, r.codigo, r.puesto, r.puesto_tipo]
       .some(c => (c || '').toLowerCase().includes(q));
@@ -78,7 +85,7 @@ export default function PersonalDiaScreen() {
   // Zonas disponibles para el selector (Todas / zona específica).
   const zonasDisponibles = (() => {
     const set = new Set<string>();
-    for (const r of rows) { const z = (r.zona_titulo || '').trim(); if (z) set.add(z); }
+    for (const r of rows) { const z = zonaDe(r); if (z) set.add(z); }
     return Array.from(set).sort((a, b) => (zonaOrden(a) - zonaOrden(b)) || a.localeCompare(b));
   })();
 
@@ -86,7 +93,7 @@ export default function PersonalDiaScreen() {
   const secciones = (() => {
     const map = new Map<string, ReporteRow[]>();
     for (const r of filtradas) {
-      const z = (r.zona_titulo || '').trim() || 'SIN ZONA';
+      const z = zonaDe(r) || 'SIN ZONA';
       if (!map.has(z)) map.set(z, []);
       map.get(z)!.push(r);
     }
@@ -140,8 +147,11 @@ export default function PersonalDiaScreen() {
         </Text>
 
         <View style={styles.cardBottom}>
-          <Text style={styles.meta}>{item.puesto_tipo || item.puesto || ''}{item.codigo ? ` · ${item.codigo}` : ''}</Text>
-          {!!item.horario && <Text style={styles.meta}>{item.horario}</Text>}
+          {/* El puesto se acorta con "…" si es largo; el horario NUNCA se corta. */}
+          <Text style={[styles.meta, styles.metaPuesto]} numberOfLines={1}>
+            {item.puesto_tipo || item.puesto || ''}{item.codigo ? ` · ${item.codigo}` : ''}
+          </Text>
+          {!!item.horario && <Text style={[styles.meta, styles.metaHora]} numberOfLines={1}>{item.horario}</Text>}
         </View>
 
         {(asistio || falto) && (
@@ -289,6 +299,8 @@ const styles = StyleSheet.create({
   personaHueca: { color: '#B45309' },
   cardBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: 8 },
   meta: { fontSize: 12, color: '#6b7787' },
+  metaPuesto: { flex: 1 },
+  metaHora: { flexShrink: 0, fontWeight: '600' },
   estado: { marginTop: 8, fontSize: 13, fontWeight: '700' },
   ok: { color: '#1a8a5c' },
   bad: { color: '#c33a34' },
