@@ -63,11 +63,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: '#f4f6f9' },
   container: { padding: 16, paddingBottom: 32 },
-  header: { backgroundColor: AZUL, borderRadius: 16, padding: 20, marginBottom: 20 },
-  hola: { color: '#cfd8e6', fontSize: 15 },
-  name: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 2 },
-  cargo: { color: '#9fd0ff', fontSize: 13, marginTop: 4, fontWeight: '600' },
-  fecha: { color: '#cfd8e6', fontSize: 12, marginTop: 10, textTransform: 'capitalize' },
+  header: { backgroundColor: AZUL, borderRadius: 16, padding: 20, marginBottom: 20, alignItems: 'center' },
+  hola: { color: '#cfd8e6', fontSize: 15, alignSelf: 'flex-start' },   // "Hola," a la izquierda; lo demás, centrado
+  name: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 2, textAlign: 'center' },
+  cargo: { color: '#9fd0ff', fontSize: 13, marginTop: 4, fontWeight: '600', textAlign: 'center' },
+  fecha: { color: '#cfd8e6', fontSize: 12, marginTop: 10, textTransform: 'capitalize', textAlign: 'center' },
   seccion: { fontSize: 13, fontWeight: '700', color: '#5b6b79', marginBottom: 10, marginLeft: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   opcion: {
