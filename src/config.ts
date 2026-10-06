@@ -8,7 +8,8 @@
  *
  * Cambia solo esta línea para apuntar a otro backend.
  */
-/*export const API_BASE_URL = 'http://10.0.2.2:8000/api';*/
+// Celular real (y producción): el servidor de Oceansecurity. Para el EMULADOR con Django en la PC usa
+// 'http://10.0.2.2:8000/api' (esa dirección NO existe desde un celular real: da "Network request failed").
 export const API_BASE_URL = 'https://fisica.oceansecurity.net/api';
 
 // Nombre visible de la app (para textos internos).
