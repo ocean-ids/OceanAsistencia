@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, SectionList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, TextInput,
+  View, Text, FlatList, SectionList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, TextInput, Modal,
 } from 'react-native';
 import { api, ReporteRow } from '../services/api';
 
@@ -37,6 +37,24 @@ function zonaOrden(z: string): number {
 function zonaDe(r: ReporteRow): string {
   if ((r.codigo || '').toString().trim().toUpperCase() === 'BASE') return 'BASE';
   return (r.zona_titulo || '').trim();
+}
+
+// "07:00 - 19:00" (o "07:00 07:00") -> hora de ingreso y de salida.
+function partirHorario(h?: string): { ingreso: string; salida: string } {
+  const partes = (h || '').trim().split(/\s*-\s*|\s+/).filter(Boolean);
+  return { ingreso: partes[0] || '—', salida: partes[1] || '—' };
+}
+
+// Apellidos y nombres por separado. Si el servidor los manda, se usan; si no, se parte el texto:
+// los 2 primeros son los apellidos y el resto los nombres.
+function partirNombre(r: ReporteRow): { apellidos: string; nombres: string } {
+  const todo = (r.nombre_apellidos || '').trim();
+  const ap = (r.apellidos_txt || '').trim();
+  const no = (r.nombres_txt || '').trim();
+  if (ap && no && `${ap} ${no}` === todo) return { apellidos: ap, nombres: no };
+  const p = todo.split(/\s+/).filter(Boolean);
+  const n = p.length <= 2 ? 1 : 2;
+  return { apellidos: p.slice(0, n).join(' ') || '—', nombres: p.slice(n).join(' ') || '—' };
 }
 
 function jornadaColor(turno?: string): { bg: string; fg: string } {
@@ -124,13 +142,15 @@ export default function PersonalDiaScreen() {
     setFecha(toISO(d));
   };
 
+  const [detalle, setDetalle] = useState<ReporteRow | null>(null);   // registro abierto en el detalle
+
   const renderItem = ({ item }: { item: ReporteRow }) => {
     const jc = jornadaColor(item.turno);
     const esHueca = item.hueca || (item.nombre_apellidos || '').toUpperCase() === 'HUECA';
     const asistio = (item.estado_asistencia || '').toUpperCase() === 'ASISTIO';
     const falto = (item.estado_asistencia || '').toUpperCase() === 'FALTO';
     return (
-      <View style={styles.card}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={() => setDetalle(item)}>
         <View style={styles.cardTop}>
           <Text style={styles.cliente} numberOfLines={1}>
             {item.instalacion_nombre || item.cliente || '—'}
@@ -159,12 +179,43 @@ export default function PersonalDiaScreen() {
             {asistio ? '✓ Asistió' : '✗ Faltó'}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.bg}>
+      {/* Detalle del registro (al tocar una tarjeta) */}
+      <Modal visible={!!detalle} transparent animationType="slide" onRequestClose={() => setDetalle(null)}>
+        <TouchableOpacity style={styles.modalFondo} activeOpacity={1} onPress={() => setDetalle(null)}>
+          <View style={styles.modalHoja} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitulo}>Detalle del registro</Text>
+            {detalle && (() => {
+              const nom = partirNombre(detalle);
+              const h = partirHorario(detalle.horario);
+              const filas: Array<[string, string]> = [
+                ['Cliente', detalle.cliente || '—'],
+                ['Instalación', detalle.instalacion_nombre || '—'],
+                ['Nominativo', detalle.codigo || '—'],
+                ['Apellidos', nom.apellidos],
+                ['Nombres', nom.nombres],
+                ['Hora de ingreso', h.ingreso],
+                ['Hora de salida', h.salida],
+              ];
+              return filas.map(([k, v]) => (
+                <View key={k} style={styles.detFila}>
+                  <Text style={styles.detEtiqueta}>{k}</Text>
+                  <Text style={styles.detValor}>{v}</Text>
+                </View>
+              ));
+            })()}
+            <TouchableOpacity style={styles.modalCerrar} onPress={() => setDetalle(null)}>
+              <Text style={styles.modalCerrarTxt}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Barra de fecha */}
       <View style={styles.fechaBar}>
         <TouchableOpacity style={styles.navBtn} onPress={() => cambiarDia(-1)}>
@@ -282,6 +333,14 @@ const styles = StyleSheet.create({
   zChipOn: { backgroundColor: '#1c4a80', borderColor: '#1c4a80' },
   zChipTxt: { fontSize: 13, fontWeight: '600', color: '#5b6b79' },
   zChipTxtOn: { color: '#fff' },
+  modalFondo: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
+  modalHoja: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, paddingBottom: 28 },
+  modalTitulo: { fontSize: 17, fontWeight: '800', color: '#14202b', marginBottom: 12, textAlign: 'center' },
+  detFila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#eef1f5', gap: 12 },
+  detEtiqueta: { fontSize: 13, color: '#6b7787', fontWeight: '600' },
+  detValor: { flex: 1, textAlign: 'right', fontSize: 14, color: '#14202b', fontWeight: '700' },
+  modalCerrar: { marginTop: 16, backgroundColor: AZUL, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  modalCerrarTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
   zonaHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#e8edf3', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, marginBottom: 8, marginTop: 4 },
   zonaHeadTxt: { fontSize: 13, fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
   zonaHeadCount: { fontSize: 12, fontWeight: '700', color: '#64748b' },

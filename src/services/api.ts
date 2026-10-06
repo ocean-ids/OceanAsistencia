@@ -68,6 +68,8 @@ export type ReporteRow = {
   horario?: string;
   turno?: string;               // Diurno / Nocturno / Tarde / Veinticuatro
   nombre_apellidos?: string;    // "HUECA" si no hay persona
+  apellidos_txt?: string;       // apellidos por separado (si el servidor ya los manda)
+  nombres_txt?: string;         // nombres por separado
   estado_asistencia?: string;   // ASISTIO / FALTO / ''
   estado?: string;
   reemplazo_id?: number | null;
